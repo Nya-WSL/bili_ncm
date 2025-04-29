@@ -12,7 +12,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.1.1"
+version = "1.1.2"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
@@ -66,7 +66,14 @@ class BiliHandler(blivedm.BaseHandler):
             b_connect_switch.set_value(True)
             b_connect_switch.set_text("已连接弹幕服务器")
             logger.info(f"已连接至{room_id.value}")
-            if pyncm.GetCurrentSession().nickname == "":
+
+            try:
+                session = pyncm.GetCurrentSession().nickname
+            except Exception as e:
+                logger.error(f"_on_heartbeat_check_ncm_session: {e}")
+                session = ""
+
+            if session == "":
                 with open("config.json", "r", encoding="utf-8") as f:
                     config = json.load(f)
                 session = config["ncm_session"]
@@ -286,7 +293,14 @@ def ncm_to_player(id = None, add = False):
         playlist = json.load(f)
     if id == None:
         audio = []
-        if pyncm.GetCurrentSession().nickname == "":
+
+        try:
+            nickname = pyncm.GetCurrentSession().nickname
+        except Exception as e:
+            logger.error(e)
+            nickname = ""
+
+        if nickname == "":
             with open("config.json", "r", encoding="utf-8") as f:
                 config = json.load(f)
             ncm_api.auth_cookie(config["ncm_cookie"])
@@ -344,12 +358,17 @@ def check_auth():
         pyncm.SetCurrentSession(pyncm.LoadSessionFromString(session_str))
         stasus = True
 
-    session = pyncm.GetCurrentSession()
-    if session.nickname != "":
+    try:
+        session = pyncm.GetCurrentSession().nickname
+    except Exception as e:
+        logger.error(f"check_auth: {e}")
+        session = ""
+
+    if session != "":
         stasus = True
 
     if stasus:
-        ui.notify("网易云已登录：" + session.nickname, type="positive")
+        ui.notify("网易云已登录：" + session, type="positive")
     else:
         ui.notify("网易云登录态失效或未登录", type="negative")
 
@@ -459,7 +478,7 @@ def _():
         with ui.row():
             manual_keyword = ui.input("歌曲id").style("width: 150px;")
             manual_keyword.tooltip("输入歌曲id或网易云链接")
-            ui.button("搜索", on_click=lambda: get_song_info(match.group() if (match := re.search(r"(?<=id=)\d+", manual_keyword.value)) else manual_keyword.value)).on_click(lambda: manual_keyword.set_value(""))
+            ui.button("搜索", on_click=lambda: get_song_info(match.group() if (match := re.search(r"(?<=id=)\d+", manual_keyword.value)) else manual_keyword.value, add=True)).on_click(lambda: manual_keyword.set_value(""))
         with ui.row():
             list_num = ui.select(options=get_list_num(), label="歌单序号").style("width: 150px;")
             ui.button("删除", on_click=lambda: del_list(list_num.value))

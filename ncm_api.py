@@ -103,7 +103,14 @@ def auth_cookie(cookie):
     cookie登录ncm
     """
     res = apis.login.LoginViaCookie(cookie)
-    if res["code"] == 200 and apis.login.GetCurrentSession().nickname != "":
+
+    try:
+        session = apis.login.GetCurrentSession().nickname
+    except Exception as e:
+        logger.error(f"auth_cookie: {e}")
+        session = ""
+
+    if res["code"] == 200 and session != "":
         return True
     else:
         return False

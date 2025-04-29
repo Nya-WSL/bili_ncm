@@ -162,3 +162,5 @@ cython_debug/
 update.zip
 test*
 config.json
+playlist.json
+aplayer.json
