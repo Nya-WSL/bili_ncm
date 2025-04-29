@@ -1,6 +1,6 @@
 # 基于blivedm和NiceGUI的BILIBILI网易云点歌姬
 
-![version](https://img.shields.io/badge/Version-1.1.1-cyan) ![python](https://img.shields.io/badge/Python->=3.9,<3.14-blue) ![os](https://img.shields.io/badge/OS-Windows|Linux|MacOS-orange)
+![version](https://img.shields.io/badge/Version-1.1.2-cyan) ![python](https://img.shields.io/badge/Python->=3.9,<3.14-blue) ![os](https://img.shields.io/badge/OS-Windows|Linux|MacOS-orange)
 
 ### Usage
 
