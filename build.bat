@@ -1,0 +1,1 @@
+poetry run python build.py --name bili_ncm --windowed main.py

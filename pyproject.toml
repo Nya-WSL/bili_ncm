@@ -1,0 +1,27 @@
+[project]
+name = "bili-ncm"
+version = "0.0.1-alpha"
+description = "基于blivedm和网易云音乐的B站直播点歌姬"
+authors = [
+    {name = "Nya-WSL"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "nicegui (>=2.15.0,<3.0.0)",
+    "pywebview (>=5.3.2,<6.0.0)",
+    "pyncm (>=1.7.1,<2.0.0)",
+    "brotli (>=1.1.0,<2.0.0)",
+    "aiohttp (>=3.11.18,<4.0.0)",
+    "yarl (>=1.20.0,<2.0.0)",
+    "pyinstaller (>=6.13.0,<7.0.0)",
+    "inquirer (>=3.4.0,<4.0.0)",
+]
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
