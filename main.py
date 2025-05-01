@@ -12,7 +12,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.1.2"
+version = "1.1.3"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
@@ -297,13 +297,16 @@ def ncm_to_player(id = None, add = False):
         try:
             nickname = pyncm.GetCurrentSession().nickname
         except Exception as e:
-            logger.error(e)
+            logger.error(f"ncm_to_player: {e}")
             nickname = ""
 
         if nickname == "":
             with open("config.json", "r", encoding="utf-8") as f:
                 config = json.load(f)
-            ncm_api.auth_cookie(config["ncm_cookie"])
+            try:
+                ncm_api.auth_cookie(config["ncm_cookie"])
+            except Exception as e:
+                logger.error(f"ncm_to_player: {e}")
 
         for id in playlist:
             info = ncm_api.get_song_info(id)
