@@ -12,7 +12,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.1.3"
+version = "1.2.0"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
@@ -200,7 +200,7 @@ def save_config():
     with open("config.json", "w+", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
 
-def change_list():
+def change_list(on = False):
     with open("aplayer.json", "r", encoding="utf-8") as f:
         audio = json.load(f)
     with open("playlist.json", "r", encoding="utf-8") as f:
@@ -209,13 +209,19 @@ def change_list():
         audio.pop(0)
         with open("aplayer.json", "w", encoding="utf-8") as f:
             json.dump(audio, f, ensure_ascii=False, indent=4)
+        print(1)
     if len(playlist) > 0:
         playlist.pop(0)
         with open("playlist.json", "w", encoding="utf-8") as f:
             json.dump(playlist, f, ensure_ascii=False, indent=4)
 
-    send('list.remove(0)')
-    list_num.set_options(get_list_num()) # 更新列表序号
+    if not on:
+        send('list.remove(0)')
+
+    try:
+        list_num.set_options(get_list_num()) # 更新列表序号
+    except NameError:
+        logger.warning("更新列表序号失败，可能在主窗口创建前访问了播放器，如果是请忽略")
 
 def clear_list():
     with open("aplayer.json", "w", encoding="utf-8") as f:
@@ -413,9 +419,9 @@ for key in diff:
 with open("config.json", "w", encoding="utf-8") as f:
     json.dump(config, f, ensure_ascii=False, indent=4)
 
-    # APlayer 的 CDN 资源（JS 和 CSS）
-    aplayer_js = "/static/aplayer/APlayer.min.js"
-    aplayer_css = "/static/aplayer/APlayer.min.css"
+# APlayer 的 CDN 资源（JS 和 CSS）
+aplayer_js = "/static/aplayer/APlayer.min.js"
+aplayer_css = "/static/aplayer/APlayer.min.css"
 
 @ui.page('/player')
 def _():
@@ -425,6 +431,8 @@ def _():
         <script src="{aplayer_js}"></script>
     ''')
 
+    volume = float(app.storage.general["volume"]) / 100
+
     with ui.card(align_items="center").classes("bg-transparent").style("box-shadow: None; left: 50%; transform: translate(-50%, 0%);"):
         ui.add_body_html(f'''
             <div id="aplayer"></div>
@@ -432,12 +440,21 @@ def _():
                 const ap = new APlayer({{
                     container: document.getElementById('aplayer'), // 指定播放器容器
                     lrcType: 1, // 指定歌词类型
+                    volume: {volume}, // 指定音量
                     audio: {ncm_to_player()}, // 指定音频列表
                     autoplay: true, // 是否自动播放,
                     listMaxHeight: 20, // 列表最大高度
                 }});
+                ap.volume({volume}, true); // 设置音量
+                ap.on('ended', function () {{
+                    ap.list.remove(0);
+                    emitEvent('ap_ended'); // 创建自定义监听：播放结束
+                    ap.play();
+                }});
             </script>
         ''')
+
+    ui.on('ap_ended', lambda: change_list(True)) # 监听自定义的播放结束事件
 
 def send(msg: str):
     for client in app.clients("/player"):
@@ -490,6 +507,13 @@ def _():
             ui.button("暂停", on_click=lambda: send('pause()'))
             ui.button("切歌", on_click=lambda: change_list())
             ui.button("清空", on_click=lambda: clear_list())
+        with ui.row(align_items="center"):
+            ui.button("上一首", on_click=lambda: send('skipBack()'))
+            ui.button("下一首", on_click=lambda: send('skipForward()'))
+
+        ui.label() # 占位符
+        volume_slider = ui.slider(min=0, max=100, step=1, value=20, on_change=lambda e: send(f'volume({e.value / 100}, true)')).bind_value(app.storage.general, "volume").props('label-always')
+
         with ui.row():
             ui.button("登录网易云", on_click=lambda: auth_dialog.open())
             ui.button("检查更新", on_click=lambda: check_update())

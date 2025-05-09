@@ -164,3 +164,4 @@ test*
 config.json
 playlist.json
 aplayer.json
+.nicegui/storage-general.json
