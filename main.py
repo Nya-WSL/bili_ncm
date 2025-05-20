@@ -12,7 +12,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.2.0"
+version = "1.2.1"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
@@ -209,7 +209,6 @@ def change_list(on = False):
         audio.pop(0)
         with open("aplayer.json", "w", encoding="utf-8") as f:
             json.dump(audio, f, ensure_ascii=False, indent=4)
-        print(1)
     if len(playlist) > 0:
         playlist.pop(0)
         with open("playlist.json", "w", encoding="utf-8") as f:
