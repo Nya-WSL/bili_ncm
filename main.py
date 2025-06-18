@@ -12,7 +12,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.2.1"
+version = "1.2.2"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
