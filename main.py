@@ -12,7 +12,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.2.2"
+version = "1.2.3"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
@@ -223,12 +223,20 @@ def change_list(on = False):
         logger.warning("更新列表序号失败，可能在主窗口创建前访问了播放器，如果是请忽略")
 
 def clear_list():
-    with open("aplayer.json", "w", encoding="utf-8") as f:
-        json.dump([], f, ensure_ascii=False, indent=4)
-    with open("playlist.json", "w", encoding="utf-8") as f:
-        json.dump([], f, ensure_ascii=False, indent=4)
-    send("list.clear()")
-    list_num.set_options(get_list_num()) # 更新列表序号
+    def clear_list_fun():
+        with open("aplayer.json", "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=4)
+        with open("playlist.json", "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=4)
+        send("list.clear()")
+        list_num.set_options(get_list_num()) # 更新列表序号
+        double_check.close()
+
+    with ui.dialog(value=True) as double_check, ui.card(align_items="center"):
+        ui.label("确定清空列表？")
+        with ui.row():
+            ui.button("清空", on_click=lambda: clear_list_fun())
+            ui.button("取消", on_click=lambda: double_check.close())
 
 def del_list(num):
     if num != None or num != "":
