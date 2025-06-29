@@ -1,71 +1,107 @@
 
-import json, os, re, aiohttp, http.cookies, asyncio, shutil, pyncm, requests
+import json, os, re, asyncio, shutil, pyncm, requests, signal, sys, traceback
 
 import ncm_api
+import bili_api
 import update
 import blivedm.blivedm.models.web as web_models
+import blivedm.blivedm.models.open_live as open_models
 
 from typing import *
 from log import logger
 from pyncm import apis
 from nicegui import ui, app
+from aiohttp import client_exceptions
 
 from blivedm import blivedm
 
-version = "1.2.3-fix2"
+version = "1.3.0"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
-# 弹幕数据连接
+example_config = {
+                    "port": 8080,
+                    "ACCESS_KEY_ID": "",
+                    "ACCESS_KEY_SECRET": "",
+                    "APP_ID": 0,
+                    "auth_code": "",
+                    "ncm_cookie": "",
+                    "ncm_session": ""
+                }
+
+if not os.path.exists("config.json"):
+    if not os.path.exists("config.example.json"):
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(example_config, f, ensure_ascii=False, indent=4
+            )
+    else:
+        shutil.copy("config.example.json", "config.json")
+
+with open("config.json", "r", encoding="utf-8") as f:
+    config = json.load(f)
+
+diff = example_config.keys() - config.keys()
+
+for key in diff:
+    config[key] = example_config[key]
+diff = config.keys() - example_config.keys()
+for key in diff:
+    config.pop(key, None)
+
+with open("config.json", "w", encoding="utf-8") as f:
+    json.dump(config, f, ensure_ascii=False, indent=4)
+
+ACCESS_KEY_ID = config.get("ACCESS_KEY_ID", "")
+ACCESS_KEY_SECRET = config.get("ACCESS_KEY_SECRET", "")
+APP_ID = int(config.get("APP_ID", 0))
+ROOM_ID = 0
+
+# 主播身份码
+ROOM_OWNER_AUTH_CODE = config.get("auth_code") or None # 空字符串为False
+
+signal_list = (signal.SIGTERM, signal.SIGBREAK)
+
+async def signal_handler(signum, frame):
+    await client.stop_and_close()
+
+if sys.platform == 'win32':
+    for i in signal_list:
+        signal.signal(i, signal_handler)
+
 async def start_handler():
+    await run_single_client()
+
+async def run_single_client():
     global client
+    client = blivedm.OpenLiveClient(
+        access_key_id=ACCESS_KEY_ID,
+        access_key_secret=ACCESS_KEY_SECRET,
+        app_id=APP_ID,
+        room_owner_auth_code=ROOM_OWNER_AUTH_CODE,
+    )
+    handler = BiliHandler()
+    client.set_handler(handler)
 
-    # 读入配置文件
-    with open("config.json", "r", encoding="utf-8") as f:
-        config = json.load(f)
+    client.start()
 
-    # 直播间ID的取值看直播间URL
-    ROOM_ID = config["room_id"]
-
-    # 这里填一个已登录账号的cookie的SESSDATA字段的值。不填也可以连接，但是收到弹幕的用户名会打码，UID会变成0
-    SESSDATA = config["bili_sessdata"]
-
-    session: Optional[aiohttp.ClientSession] = None
-
-    # 创建ws
     try:
-        cookies = http.cookies.SimpleCookie()
-        cookies['SESSDATA'] = SESSDATA
-        cookies['SESSDATA']['domain'] = 'bilibili.com'
-
-        session = aiohttp.ClientSession()
-        session.cookie_jar.update_cookies(cookies)
-
-        room_id = ROOM_ID
-        client = blivedm.BLiveClient(room_id, session=session)
-        handler = BiliHandler()
-        client.set_handler(handler)
-        client.start()
-
-        try:
-            await client.join()
-        finally:
-            await client.stop_and_close()
-
+        await client.join()
     finally:
-        await session.close()
+        await client.stop_and_close()
 
 # 获取弹幕信息
 class BiliHandler(blivedm.BaseHandler):
     heart_count = 0
     # 心跳数据
     def _on_heartbeat(self, client: blivedm.BLiveClient, message: web_models.HeartbeatMessage):
+        global ROOM_ID
         self.heart_count += 1
         logger.debug(f'[{client.room_id}] {message}')
         if self.heart_count < 2:
             b_connect_switch.set_value(True)
-            b_connect_switch.set_text("已连接弹幕服务器")
-            logger.info(f"已连接至{room_id.value}")
+            b_connect_switch.set_text(f"已连接至: {client.room_id}")
+            logger.info(f"已连接至{client.room_id}")
+            ROOM_ID = client.room_id
 
             try:
                 session = pyncm.GetCurrentSession().nickname
@@ -83,7 +119,7 @@ class BiliHandler(blivedm.BaseHandler):
                     if config["ncm_cookie"] != "":
                         ncm_api.auth_cookie(config["ncm_cookie"])
 
-    def _on_danmaku(self, client: blivedm.BLiveClient, message: web_models.DanmakuMessage):
+    def _on_open_live_danmaku(self, client: blivedm.OpenLiveClient, message: open_models.DanmakuMessage):
         user = message.uname
         msg = message.msg
 
@@ -98,6 +134,16 @@ class BiliHandler(blivedm.BaseHandler):
                     pass
                 else:
                     get_song_info(song, True)
+
+    def _on_open_live_gift(self, client: blivedm.OpenLiveClient, message: open_models.GiftMessage):
+        coin_type = '金瓜子' if message.paid else '银瓜子'
+        total_coin = message.price * message.gift_num
+        print(f'[{message.room_id}] {message.uname} 赠送{message.gift_name}x{message.gift_num}'
+              f' （{coin_type}x{total_coin}）')
+
+    def _on_open_live_buy_guard(self, client: blivedm.OpenLiveClient, message: open_models.GuardBuyMessage):
+        print(f'[{message.room_id}] {message.user_info.uname} 购买 大航海等级={message.guard_level}')
+
 
 # 检查版本更新按钮
 def check_update(init = False):
@@ -150,35 +196,41 @@ async def check_b_connect_status():
     with open("config.json", "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    # 如果连接弹幕服务器开关为关且房间号不为空
+    # 如果连接弹幕服务器开关为关且身份码不为空
     if b_connect_switch.value == False:
-        if room_id.value == "":
+        if ROOM_OWNER_AUTH_CODE == None:
             if not b_connect_status:
                 b_connect_switch.set_value(False)
                 return
             else:
                 b_connect_status = False
                 await client.stop_and_close() # 断开弹幕服务器ws连接并关闭blivedm客户端
-                ui.notify("已断开连接，这通常是因为手动关闭了连接或房间号不正确")
+                ui.notify("已断开连接，这通常是因为手动关闭了连接或身份码不正确")
                 b_connect_switch.set_value(False)
                 b_connect_switch.set_text("连接至弹幕服务器")
         else:
             b_connect_status = False
-            await client.stop_and_close() # 断开弹幕服务器ws连接并关闭blivedm客户端
-            ui.notify("已断开连接，这通常是因为手动关闭了连接或房间号不正确")
+            try:
+                await client.stop_and_close() # 断开弹幕服务器ws连接并关闭blivedm客户端
+                logger.info("弹幕服务器ws连接已断开")
+                ui.notify("已断开连接，这通常是因为手动关闭了连接或身份码不正确")
+            except Exception as e:
+                logger.warning(e)
             b_connect_switch.set_value(False)
             b_connect_switch.set_text("连接至弹幕服务器")
 
     if b_connect_switch.value == "null":
-        if room_id.value == "":
+        if ROOM_OWNER_AUTH_CODE == None:
             b_connect_switch.set_value(False)
             return
 
         if not b_connect_status:
             with open("config.json", "r", encoding="utf-8") as f:
                 config = json.load(f)
-            if config["bili_sessdata"] == "":
-                ui.notify("未登录B站账号，可能无法显示用户名", type="warning")
+            if ROOM_OWNER_AUTH_CODE == None:
+                ui.notify("未填入身份码，无法连接弹幕服务器", type="negative")
+                b_connect_switch.set_value(False)
+                return
             asyncio.create_task(start_handler()) # 创建连接弹幕服务器协程
             b_connect_switch.set_value("null")
             b_connect_switch.set_text("尝试连接弹幕服务器")
@@ -188,8 +240,8 @@ async def check_b_connect_status():
 
     # 如果连接弹幕服务器开关为开
     if b_connect_switch.value == True:
-        if room_id.value == "": # 如果房间号为空
-            ui.notify("请输入房间号", type="negative")
+        if ROOM_OWNER_AUTH_CODE == None: # 如果身份码为空
+            ui.notify("请输入身份码", type="negative")
             b_connect_switch.set_value(False) # 重置开关为关
             return
 
@@ -200,7 +252,7 @@ def save_config():
     with open("config.json", "w+", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
 
-def change_list(on = False):
+async def change_list(on = False):
     with open("aplayer.json", "r", encoding="utf-8") as f:
         audio = json.load(f)
     with open("playlist.json", "r", encoding="utf-8") as f:
@@ -216,6 +268,9 @@ def change_list(on = False):
 
     if not on:
         send('list.remove(0)')
+        send('list.hide()')
+        await asyncio.sleep(0.5)
+        send('list.show()')
 
     try:
         list_num.set_options(get_list_num()) # 更新列表序号
@@ -361,6 +416,7 @@ def ncm_to_player(id = None, add = False):
                     }
                     ]
                 send(f'list.add({song})')
+                send("list.show()")
         with open("aplayer.json", "w", encoding="utf-8") as f:
             json.dump(audio, f, ensure_ascii=False, indent=4)
         list_num.set_options(get_list_num()) # 更新列表序号
@@ -396,36 +452,6 @@ if not os.path.exists("playlist.json"):
     with open("playlist.json", "w", encoding="utf-8") as f:
         json.dump([], f, ensure_ascii=False, indent=4)
 
-example_config = {
-                    "port": 8080,
-                    "room_id": "",
-                    "bili_sessdata": "",
-                    "ncm_cookie": "",
-                    "ncm_session": ""
-                }
-
-if not os.path.exists("config.json"):
-    if not os.path.exists("config.example.json"):
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(example_config, f, ensure_ascii=False, indent=4
-            )
-    else:
-        shutil.copy("config.example.json", "config.json")
-
-with open("config.json", "r", encoding="utf-8") as f:
-    config = json.load(f)
-
-diff = example_config.keys() - config.keys()
-
-for key in diff:
-    config[key] = example_config[key]
-diff = config.keys() - example_config.keys()
-for key in diff:
-    config.pop(key, None)
-
-with open("config.json", "w", encoding="utf-8") as f:
-    json.dump(config, f, ensure_ascii=False, indent=4)
-
 # APlayer 的 CDN 资源（JS 和 CSS）
 aplayer_js = "/static/aplayer/APlayer.min.js"
 aplayer_css = "/static/aplayer/APlayer.min.css"
@@ -453,7 +479,9 @@ def _():
             }});
             ap.volume({volume}, true); // 设置音量
             ap.on('ended', function () {{
-                ap.list.remove(0);
+                ap.list.remove(ap.list.index - 1); // index为下一首歌，需-1
+                ap.list.hide() // aplayer在移除时不会自动更新列表，需手动刷新一次
+                ap.list.show()
                 emitEvent('ap_ended'); // 创建自定义监听：播放结束
                 ap.play();
             }});
@@ -478,7 +506,7 @@ port = config["port"]
 
 @ui.page("/")
 def _():
-    global room_id, b_connect_switch, list_num
+    global b_connect_switch, list_num
     # with open("config.json", "r", encoding="utf-8") as f:
     #     config = json.load(f)
 
@@ -486,6 +514,22 @@ def _():
         with open("config.json", "r", encoding="utf-8") as f:
             config = json.load(f)
         ui.notify("登录成功", type="positive") if ncm_api.auth_cookie(config["ncm_cookie"]) else ui.notify("cookie登录失败", type="negative")
+
+    def update_auth_code(value):
+        global ROOM_OWNER_AUTH_CODE
+        ROOM_OWNER_AUTH_CODE = value
+        save_config()
+    
+    def get_gift():
+        gifts = bili_api.get_room_gift("android", ROOM_ID)
+        if not gifts:
+            return {"not_connect": "未连接至弹幕服务器"}
+        else:
+            gift_list = []
+            gifts = gifts["data"]["gift_config"]["base_config"]["list"]
+            for gift in gifts:
+                gift_list.append(gift["name"])
+            return gift_list
 
     with ui.dialog() as auth_dialog, ui.card(align_items="center"):
         with ui.row():
@@ -499,8 +543,14 @@ def _():
             ui.button("使用cookie登录", on_click=lambda: notify())
 
     with ui.card(align_items="center").classes("absolute-center"):
-        room_id = ui.input("房间号", on_change=lambda: save_config()).style("width: 150px").bind_value(config, "room_id")
+        ui.input("身份码", password=True, password_toggle_button=True, on_change=lambda e: update_auth_code(e.value)).bind_value(config, "auth_code")
+
         b_connect_switch = ui.switch("连接至弹幕服务器", on_change=lambda: check_b_connect_status()).props('checked-icon="check" color="green" unchecked-icon="clear"')
+
+        with ui.row():
+            gift_select = ui.select(options=get_gift(), label="选择礼物", with_input=True, clearable=True).style("width: 150px;").bind_value(app.storage.general, "gift_name").on("open")
+            ui.button("刷新", on_click=lambda: gift_select.set_options(get_gift()))
+
         with ui.row():
             manual_keyword = ui.input("歌曲id").style("width: 150px;")
             manual_keyword.tooltip("输入歌曲id或网易云链接")
@@ -518,16 +568,15 @@ def _():
             ui.button("下一首", on_click=lambda: send('skipForward()'))
 
         ui.label() # 占位符
-        volume_slider = ui.slider(min=0, max=100, step=1, value=20, on_change=lambda e: send(f'volume({e.value / 100}, true)')).bind_value(app.storage.general, "volume").props('label-always')
+        ui.slider(min=0, max=100, step=1, value=20, on_change=lambda e: send(f'volume({e.value / 100}, true)')).bind_value(app.storage.general, "volume").props('label-always')
 
         with ui.row():
             ui.button("登录网易云", on_click=lambda: auth_dialog.open())
             ui.button("检查更新", on_click=lambda: check_update())
-        with ui.row():
-            ui.label(f"OBS浏览器源URL:")
-            ui.link(f"http://127.0.0.1:{port}/player", f"http://127.0.0.1:{port}/player", new_tab=True)
+        with ui.link(f"http://127.0.0.1:{port}/player", f"http://127.0.0.1:{port}/player", new_tab=True):
+            ui.tooltip("OBS浏览器源URL")
 
     check_update(True)
     ui.timer(300, lambda: check_auth())
 
-ui.run(port=port, title=f"bili_ncm | v{version}", native=True, reload=False)
+ui.run(port=port, title=f"bili_ncm | v{version}", native=True, reload=False, window_size=[660, 760])
