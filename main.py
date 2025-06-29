@@ -12,7 +12,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.2.3-fix1"
+version = "1.2.3-fix2"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
@@ -440,26 +440,25 @@ def _():
 
     volume = float(app.storage.general["volume"]) / 100
 
-    with ui.card(align_items="center").classes("bg-transparent").style("box-shadow: None; left: 50%; transform: translate(-50%, 0%);"):
-        ui.add_body_html(f'''
-            <div id="aplayer"></div>
-            <script>
-                const ap = new APlayer({{
-                    container: document.getElementById('aplayer'), // 指定播放器容器
-                    lrcType: 1, // 指定歌词类型
-                    volume: {volume}, // 指定音量
-                    audio: {ncm_to_player()}, // 指定音频列表
-                    autoplay: true, // 是否自动播放,
-                    listMaxHeight: 20, // 列表最大高度
-                }});
-                ap.volume({volume}, true); // 设置音量
-                ap.on('ended', function () {{
-                    ap.list.remove(0);
-                    emitEvent('ap_ended'); // 创建自定义监听：播放结束
-                    ap.play();
-                }});
-            </script>
-        ''')
+    ui.add_body_html(f'''
+        <div id="aplayer"></div>
+        <script>
+            const ap = new APlayer({{
+                container: document.getElementById('aplayer'), // 指定播放器容器
+                lrcType: 1, // 指定歌词类型
+                volume: {volume}, // 指定音量
+                audio: {ncm_to_player()}, // 指定音频列表
+                autoplay: true, // 是否自动播放,
+                listMaxHeight: 1024, // 列表最大高度
+            }});
+            ap.volume({volume}, true); // 设置音量
+            ap.on('ended', function () {{
+                ap.list.remove(0);
+                emitEvent('ap_ended'); // 创建自定义监听：播放结束
+                ap.play();
+            }});
+        </script>
+    ''')
 
     ui.on('ap_ended', lambda: change_list(True)) # 监听自定义的播放结束事件
 
