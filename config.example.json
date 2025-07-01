@@ -1,7 +1,9 @@
 {
     "port": 8080,
-    "room_id": "",
-    "bili_sessdata": "",
+    "ACCESS_KEY_ID": "",
+    "ACCESS_KEY_SECRET": "",
+    "APP_ID": 0,
+    "auth_code": "",
     "ncm_cookie": "",
     "ncm_session": ""
 }

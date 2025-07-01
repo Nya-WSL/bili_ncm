@@ -166,3 +166,5 @@ playlist.json
 aplayer.json
 .nicegui/storage-general.json
 danmaku.json
+*.env
+env.py

@@ -1,6 +1,7 @@
 
 import json, os, re, asyncio, shutil, pyncm, requests, signal, sys, datetime
 
+import env # 该模块仅在打包时自动生成，打包后将会删除
 import ncm_api
 import bili_api
 import update
@@ -14,7 +15,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.3.0"
+version = "1.3.1-alpha"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
@@ -54,9 +55,24 @@ if not os.path.exists("danmaku.json"):
     with open("danmaku.json", "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=4)
 
-ACCESS_KEY_ID = config.get("ACCESS_KEY_ID", "")
-ACCESS_KEY_SECRET = config.get("ACCESS_KEY_SECRET", "")
-APP_ID = int(config.get("APP_ID", 0))
+# 需申请哔哩哔哩直播开放平台开发者账号并将id、key和app_id填入config.json中，如需开箱即用请在 https://github.com/Nya-WSL/bili_ncm/releases 下载
+bili_keys = env.get_key()
+
+if config.get("ACCESS_KEY_ID", "") != "":
+    ACCESS_KEY_ID = config.get("ACCESS_KEY_ID", "")
+else:
+    ACCESS_KEY_ID = bili_keys.get("ACCESS_KEY_ID", "")
+
+if config.get("ACCESS_KEY_SECRET", "") != "":
+    ACCESS_KEY_SECRET = config.get("ACCESS_KEY_SECRET", "")
+else:
+    ACCESS_KEY_SECRET = bili_keys.get("ACCESS_KEY_SECRET", "")
+
+if config.get("APP_ID", 0) != 0:
+    APP_ID = int(config.get("APP_ID", 0))
+else:
+    APP_ID = int(bili_keys.get("APP_ID", 0))
+
 ROOM_ID = 0
 
 # 主播身份码
@@ -64,17 +80,13 @@ ROOM_OWNER_AUTH_CODE = config.get("auth_code") or None # 空字符串为False
 
 danmaku_cd = {}
 
-signal_list = (signal.SIGTERM, signal.SIGBREAK)
-
-async def signal_handler(signum, frame):
-    await client.stop_and_close()
-
-if sys.platform == 'win32':
-    for i in signal_list:
-        signal.signal(i, signal_handler)
-
 async def start_handler():
     await run_single_client()
+
+@app.on_shutdown
+async def shut_down():
+    await client.stop_and_close()
+    logger.info('ws connect shut down')
 
 async def run_single_client():
     global client
@@ -86,7 +98,6 @@ async def run_single_client():
     )
     handler = BiliHandler()
     client.set_handler(handler)
-
     client.start()
 
     try:

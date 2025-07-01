@@ -1,6 +1,6 @@
 [project]
 name = "bili-ncm"
-version = "0.0.1-alpha"
+version = "1.3.1-alpha"
 description = "基于blivedm和网易云音乐的B站直播点歌姬"
 authors = [
     {name = "Nya-WSL"}

@@ -45,7 +45,20 @@ def main() -> None:
     parser.add_argument('main', default='main.py', help='Main file which calls `ui.run()`.')
     parser.add_argument('--icon', type=str, help='Icon file for the program. Must be a .ico file on Windows.')
     parser.add_argument('--hidden-import')
+    parser.add_argument('--access_key_id', default='')
+    parser.add_argument('--access_key_secret', default='')
+    parser.add_argument('--app_id', default='')
     args = parser.parse_args()
+
+    with open("env.py", "w", encoding="utf-8") as f:
+        f.write(f"""
+def get_key():
+    return {{
+        "ACCESS_KEY_ID": f"{args.access_key_id}",
+        "ACCESS_KEY_SECRET": f"{args.access_key_secret}",
+        "APP_ID": {args.app_id}
+    }}
+""")
 
     for directory in ['build', 'dist']:
         if Path(directory).exists():
@@ -71,6 +84,7 @@ def main() -> None:
     subprocess.call(command)
     shutil.copytree("static", os.path.join("dist", args.name, "static"))
     shutil.copy("config.example.json", os.path.join("dist", args.name))
+    os.remove("env.py")
 
 if __name__ == '__main__':
     main()

@@ -15,7 +15,7 @@ def setup_logger():
 
     # 创建控制台处理器并设置级别和格式
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)  # 控制台只记录INFO及以上级别的日志
+    console_handler.setLevel(logging.DEBUG)  # 控制台只记录INFO及以上级别的日志
     console_handler.setFormatter(formatter)
 
     # 将处理器添加到logger
