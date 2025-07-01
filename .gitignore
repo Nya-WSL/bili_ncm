@@ -165,3 +165,4 @@ config.json
 playlist.json
 aplayer.json
 .nicegui/storage-general.json
+danmaku.json
