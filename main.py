@@ -55,6 +55,10 @@ if not os.path.exists("danmaku.json"):
     with open("danmaku.json", "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=4)
 
+if not os.path.exists("song.json"):
+    with open("song.json", "w", encoding="utf-8") as f:
+        json.dump([], f, ensure_ascii=False, indent=4)
+
 # 需申请哔哩哔哩直播开放平台开发者账号并将id、key和app_id填入config.json中，如需开箱即用请在 https://github.com/Nya-WSL/bili_ncm/releases 下载
 bili_keys = env.get_key()
 
@@ -170,8 +174,7 @@ class BiliHandler(blivedm.BaseHandler):
                     if time_diff >= int(delay_gift_time.value):
                         result = f"[弹幕在送礼前后{delay_gift_time.value / 60}分钟外] 用户: {user}, 时间差: {time_diff}秒"
                         logger.info(result)
-                        with notify_card:
-                            ui.notify(result)
+
                         try:
                             danmaku_data[user].pop('gift')
                             danmaku_data[user].pop('danmaku')
@@ -181,11 +184,15 @@ class BiliHandler(blivedm.BaseHandler):
                         result = f"[弹幕在送礼前后{delay_gift_time.value / 60}分钟内] 用户: {user}, 时间差: {time_diff}秒"
                         logger.info(result)
                         status = True
+
                         try:
                             danmaku_data[user].pop('gift')
                             danmaku_data[user].pop('danmaku')
                         except Exception as e:
                             logger.warning(f"礼物记录出现错误: {e}")
+
+                    with notify_card:
+                        ui.notify(result)
 
             if danmaku_checkbox.value:
                 current_time = int(datetime.datetime.timestamp(datetime.datetime.now()))
@@ -207,17 +214,20 @@ class BiliHandler(blivedm.BaseHandler):
             if len(msg.split("点歌")) > 1:
                 song = msg.split("点歌")[1]
                 if len(song) > 0 and song[0] == " " and song != None:
-                    song = song[1:]
+                    song = song.strip().split(" ")
+
+                    try:
+                        artist = song[1]
+                    except:
+                        artist = ""
+
+                    song = song[0]
 
                 if song == None:
                     pass
                 else:
                     if guard_level > 0 or is_admin or status: # 如果是大航海或管理员或status为True
-                        if danmaku_data.get(user, {}).get("special", False): # 如果用户有自定义礼物记录
-                            with notify_card:
-                                ui.notify(f"感谢{user}的支持，愿世界永保和平！")
-
-                        get_song_info(song, True)
+                        append_song(song, artist)
 
                         try:
                             danmaku_data[user].pop('gift')
@@ -234,7 +244,6 @@ class BiliHandler(blivedm.BaseHandler):
         price = message.r_price * message.gift_num
         is_paid = message.paid
         current_time = int(datetime.datetime.timestamp(datetime.datetime.now()))
-        custom_gifts = ["昏睡红茶", "Nya冰美式"]
         base_price = 0
 
         logger.info(f'[{message.room_id}] {user} 赠送{gift}x{message.gift_num}')
@@ -255,7 +264,7 @@ class BiliHandler(blivedm.BaseHandler):
             else:
                 base_price = 5000 # 如果无法获取设定礼物价格则默认为50电池（5000金瓜子）
 
-            if gift == gift_select.value or gift in custom_gifts or price >= base_price: # 赠送了设定礼物或自定义礼物或实际礼物价值大于设定礼物
+            if gift == gift_select.value or price >= base_price: # 赠送了设定礼物或实际礼物价值大于设定礼物
                 if is_paid: # 如果是电池礼物
                     with open("danmaku.json", "r", encoding="utf-8") as f:
                         danmaku_data = json.load(f)
@@ -264,9 +273,6 @@ class BiliHandler(blivedm.BaseHandler):
                     if user not in danmaku_data:
                         danmaku_data[user] = {}
 
-                    # 用户赠送自定义礼物
-                    if gift in custom_gifts:
-                        danmaku_data[user]["special"] = True
 
                     # 更新送礼时间
                     danmaku_data[user]['gift'] = current_time
@@ -277,53 +283,6 @@ class BiliHandler(blivedm.BaseHandler):
 
     def _on_open_live_buy_guard(self, client: blivedm.OpenLiveClient, message: open_models.GuardBuyMessage):
         logger.info(f'[{message.room_id}] {message.user_info.uname} 购买 大航海等级={message.guard_level}')
-
-
-# 检查版本更新按钮
-def check_update(init = False):
-    def version_dialog():
-        with ui.dialog() as dialog, ui.card(align_items="center"):
-            ui.label(f"当前版本：v{version} | 最新版本：v{status}")
-
-            with ui.row():
-                ui.button("国内源", on_click=lambda: update.update("CN-HK"))
-                ui.button("海外源", on_click=lambda: update.update("Overseas")).disable()
-                ui.button("GitHub", on_click=lambda: update.update("GitHub"))
-                ui.button("取消", on_click=lambda: dialog.close())
-
-        dialog.open()
-
-    def version_check():
-        url = ["http://version.nya-wsl.cn/bili_ncm/version.txt", "https://nya-wsl.com/bili_ncm/version.txt"]
-        try:
-            latest_version = requests.get(url[0]) # 优先从Nya-WSL中国服务器获取版本信息
-            if latest_version.status_code == 200:
-                latest_version = latest_version.text.replace("\n", "") # 服务器返回内容
-            else:
-                raise ValueError("From Nya-WSL CN to get version info was error") # 抛出错误
-        except:
-            try:
-                latest_version = requests.get(url[1]) # 从Nya-WSL海外服务器获取版本信息
-                if latest_version.status_code == 200: # 服务器请求返回值
-                    latest_version = latest_version.text.replace("\n", "") # 服务器返回内容
-                else:
-                    latest_version = "Error"
-            except:
-                latest_version = "Error" # 如果请求均失败版本信息设为"Error"
-
-        return latest_version
-
-    status = version_check()
-    if status != version:
-        if status != "Error":
-            if init:
-                ui.notify(f"检查到可用更新：v{status}", progress=True, timeout=10000, color="orange-10")
-            else:
-                version_dialog()
-        else:
-            ui.notify("检查更新失败", type="negative")
-    else:
-        ui.notify("已是最新版本", type="positive")
 
 async def check_b_connect_status():
     global b_connect_status
@@ -386,278 +345,65 @@ def save_config():
     with open("config.json", "w+", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
 
-async def change_list(on = False):
-    with open("aplayer.json", "r", encoding="utf-8") as f:
-        audio = json.load(f)
-    with open("playlist.json", "r", encoding="utf-8") as f:
-        playlist = json.load(f)
-    if len(audio) > 0:
-        audio.pop(0)
-        with open("aplayer.json", "w", encoding="utf-8") as f:
-            json.dump(audio, f, ensure_ascii=False, indent=4)
-    if len(playlist) > 0:
-        playlist.pop(0)
-        with open("playlist.json", "w", encoding="utf-8") as f:
-            json.dump(playlist, f, ensure_ascii=False, indent=4)
+def change_list():
+    with open("song.json", "r", encoding="utf-8") as f:
+        songs = json.load(f)
 
-    if not on:
-        send('list.remove(0)')
-        send('list.hide()')
-        await asyncio.sleep(0.5)
-        send('list.show()')
+    songs.pop(0)
 
-    try:
-        list_num.set_options(get_list_num()) # 更新列表序号
-    except NameError:
-        logger.warning("更新列表序号失败，可能在主窗口创建前访问了播放器，如果是请忽略")
+    with open("song.json", "w+", encoding="utf-8") as f:
+        json.dump(songs, f, ensure_ascii=False, indent=4)
 
 def clear_list():
-    def clear_list_fun():
-        with open("aplayer.json", "w", encoding="utf-8") as f:
-            json.dump([], f, ensure_ascii=False, indent=4)
-        with open("playlist.json", "w", encoding="utf-8") as f:
-            json.dump([], f, ensure_ascii=False, indent=4)
-        send("list.clear()")
-        list_num.set_options(get_list_num()) # 更新列表序号
-        double_check.close()
-
-    with ui.dialog(value=True) as double_check, ui.card(align_items="center"):
-        ui.label("确定清空列表？")
-        with ui.row():
-            ui.button("清空", on_click=lambda: clear_list_fun())
-            ui.button("取消", on_click=lambda: double_check.close())
-
-def del_list(num):
-    if num != None or num != "":
-        with open("aplayer.json", "r", encoding="utf-8") as f:
-            audio = json.load(f)
-        with open("aplayer.json", "w", encoding="utf-8") as f:
-            audio.pop(num - 1)
-            json.dump(audio, f, ensure_ascii=False, indent=4)
-
-        with open("playlist.json", "r", encoding="utf-8") as f:
-            playlist = json.load(f)
-        with open("playlist.json", "w", encoding="utf-8") as f:
-            playlist.pop(num - 1)
-            json.dump(playlist, f, ensure_ascii=False, indent=4)
-
-        send(f'list.remove({num - 1})')
-        list_num.set_options(get_list_num()) # 更新列表序号
-        list_num.set_value(None) # 重置列表序号选择框的值
-
-def get_list_num():
-    with open("aplayer.json", "r", encoding="utf-8") as f:
-        return list(range(1, len(json.load(f)) + 1))
-
-def get_song_info(keyword, add = False, limit = 1):
-    id = None
-
-    if keyword == None or keyword == "":
-        logger.error("id不存在")
-        return
-
-    if not re.search(r"^\d+$", keyword):
-        song = ncm_api.get_ncm_search(keyword, limit)
-        with open("playlist.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        id = song["result"]["songs"][0]["id"]
-        data.append(id)
-    else:
-        with open("playlist.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        info = ncm_api.get_song_info(keyword)
-        if info == None:
-            logger.error("id不存在")
-            return
-        id = info["songs"][0]["id"]
-        data.append(id)
-
-    with open("playlist.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-    if add:
-        ncm_to_player(id, True)
-    else:
-        ncm_to_player(id)
-
-def get_audio_url(id):
-    """
-    获取歌曲直链
-    """
-
-    return ncm_api.get_url(id)["data"][0]["url"]
-
-def ncm_to_player(id = None, add = False):
-    """
-    将playlist.json的网易云id转换为aplayer.json的直链
-    """
-    with open("playlist.json", "r", encoding="utf-8") as f:
-        playlist = json.load(f)
-    if id == None:
-        audio = []
-
-        try:
-            nickname = pyncm.GetCurrentSession().nickname
-        except Exception as e:
-            logger.error(f"ncm_to_player: {e}")
-            nickname = ""
-
-        if nickname == "":
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-            try:
-                ncm_api.auth_cookie(config["ncm_cookie"])
-            except Exception as e:
-                logger.error(f"ncm_to_player: {e}")
-
-        for id in playlist:
-            info = ncm_api.get_song_info(id)
-            if info != None:
-                audio.append(
-                    {
-                        "name": info["songs"][0]["name"],
-                        "artist": info["songs"][0]["ar"][0]["name"],
-                        "url": get_audio_url(info["songs"][0]["id"]),
-                        "cover": info["songs"][0]["al"]["picUrl"],
-                        "lrc": apis.track.GetTrackLyrics(id)["lrc"]["lyric"]
-                    }
-                )
-        with open("aplayer.json", "w", encoding="utf-8") as f:
-            json.dump(audio, f, ensure_ascii=False, indent=4)
-        return audio
-    else:
-        with open("aplayer.json", "r", encoding="utf-8") as f:
-            audio = json.load(f)
-        info = ncm_api.get_song_info(id)
-        if info != None:
-            audio.append(
-                {
-                    "name": info["songs"][0]["name"],
-                    "artist": info["songs"][0]["ar"][0]["name"],
-                    "url": get_audio_url(info["songs"][0]["id"]),
-                    "cover": info["songs"][0]["al"]["picUrl"],
-                    "lrc": apis.track.GetTrackLyrics(id)["lrc"]["lyric"]
-                }
-            )
-            if add:
-                song = [
-                    {
-                        "name": info["songs"][0]["name"],
-                        "artist": info["songs"][0]["ar"][0]["name"],
-                        "url": get_audio_url(info["songs"][0]["id"]),
-                        "cover": info["songs"][0]["al"]["picUrl"],
-                        "lrc": apis.track.GetTrackLyrics(id)["lrc"]["lyric"]
-                    }
-                    ]
-                send(f'list.add({song})')
-                send("list.show()")
-        with open("aplayer.json", "w", encoding="utf-8") as f:
-            json.dump(audio, f, ensure_ascii=False, indent=4)
-        list_num.set_options(get_list_num()) # 更新列表序号
-
-def check_auth():
-    stasus = False
-    with open("config.json", "r", encoding="utf-8") as f:
-        config = json.load(f)
-    session_str = config["ncm_session"]
-    if session_str != "":
-        pyncm.SetCurrentSession(pyncm.LoadSessionFromString(session_str))
-        stasus = True
-
-    try:
-        session = pyncm.GetCurrentSession().nickname
-    except Exception as e:
-        logger.error(f"check_auth: {e}")
-        session = ""
-
-    if session != "":
-        stasus = True
-
-    if stasus:
-        ui.notify("网易云已登录：" + session, type="positive")
-    else:
-        ui.notify("网易云登录态失效或未登录", type="negative")
-
-if not os.path.exists("aplayer.json"):
-    with open("aplayer.json", "w", encoding="utf-8") as f:
+    with open("song.json", "w+", encoding="utf-8") as f:
         json.dump([], f, ensure_ascii=False, indent=4)
 
-if not os.path.exists("playlist.json"):
-    with open("playlist.json", "w", encoding="utf-8") as f:
-        json.dump([], f, ensure_ascii=False, indent=4)
+def append_song(song, artist = ""):
+    with open("song.json", "r", encoding="utf-8") as f:
+        songs = json.load(f)
 
-# APlayer 的 CDN 资源（JS 和 CSS）
-aplayer_js = "/static/aplayer/APlayer.min.js"
-aplayer_css = "/static/aplayer/APlayer.min.css"
+    songs.append({"song": song, "artist": artist})
 
-@ui.page('/player')
-def _():
-    global notify_card
-    # 在页面头部加载资源
-    ui.add_head_html(f'''
-        <link rel="stylesheet" href="{aplayer_css}">
-        <script src="{aplayer_js}"></script>
-    ''')
-
-    volume = float(app.storage.general["volume"]) / 100
-
-    ui.add_body_html(f'''
-        <div id="aplayer"></div>
-        <script>
-            const ap = new APlayer({{
-                container: document.getElementById('aplayer'), // 指定播放器容器
-                lrcType: 1, // 指定歌词类型
-                volume: {volume}, // 指定音量
-                audio: {ncm_to_player()}, // 指定音频列表
-                autoplay: true, // 是否自动播放,
-                listMaxHeight: 1024, // 列表最大高度
-            }});
-            ap.volume({volume}, true); // 设置音量
-            ap.on('ended', function () {{
-                ap.list.remove(ap.list.index - 1); // index为下一首歌，需-1
-                ap.list.hide() // aplayer在移除时不会自动更新列表，需手动刷新一次
-                ap.list.show()
-                emitEvent('ap_ended'); // 创建自定义监听：播放结束
-                ap.play();
-            }});
-        </script>
-    ''')
-
-    ui.on('ap_ended', lambda: change_list(True)) # 监听自定义的播放结束事件
-
-    with ui.card().classes("bg-transparent w-full").style("box-shadow: None;") as notify_card:
-        ui.label().set_visibility(False)
-
-def send(msg: str):
-    for client in app.clients("/player"):
-        with client:
-            ui.run_javascript(f'ap.{msg}')
-
-def check_cellphone(phone, captcha, ctcode):
-    result = ncm_api.auth_cellphone(phone, captcha, ctcode)
-    if result:
-        ui.notify("登录成功", type="positive")
-    else:
-        ui.notify("登录失败", type="negative")
+    with open("song.json", "w+", encoding="utf-8") as f:
+        json.dump(songs, f, ensure_ascii=False, indent=4)
 
 port = config["port"]
 
+@ui.page("/player")
+def _():
+    global notify_card
+
+    def create_card():
+        with open("song.json", "r", encoding="utf-8") as f:
+            songs = json.load(f)
+        for song in songs:
+            with ui.row(align_items="center").classes("w-full"):
+                ui.label(song["song"])
+                ui.space()
+                ui.label(song["artist"])
+
+    def refresh_card():
+        song_card.clear()
+        with song_card:
+            create_card()
+
+    with ui.card().classes("bg-transparent").style("box-shadow: None; left: 50%; transform: translate(-50%, 0%);") as song_card:
+        create_card()
+
+    with ui.card().classes("bg-transparent w-full").style("box-shadow: None;") as notify_card:
+        ui.label("").set_visibility(False)
+
+    ui.timer(5, lambda: refresh_card())
+
 @ui.page("/")
 def _():
-    global b_connect_switch, list_num, danmaku_checkbox, gift_checkbox, danmaku_time, delay_gift_time, gift_select, fans_medal, fans_medal_checkbox
-    # with open("config.json", "r", encoding="utf-8") as f:
-    #     config = json.load(f)
-
-    def notify():
-        with open("config.json", "r", encoding="utf-8") as f:
-            config = json.load(f)
-        ui.notify("登录成功", type="positive") if ncm_api.auth_cookie(config["ncm_cookie"]) else ui.notify("cookie登录失败", type="negative")
+    global b_connect_switch, danmaku_checkbox, gift_checkbox, danmaku_time, delay_gift_time, gift_select, fans_medal, fans_medal_checkbox
 
     def update_auth_code(value):
         global ROOM_OWNER_AUTH_CODE
         ROOM_OWNER_AUTH_CODE = value
         save_config()
-    
+
     def get_gift():
         gifts = bili_api.get_room_gift("android", ROOM_ID)
         if not gifts:
@@ -670,18 +416,6 @@ def _():
             if ROOM_ID == 31842:
                 gift_list.append("辣条")
             return gift_list
-
-    with ui.dialog() as auth_dialog, ui.card(align_items="center"):
-        ui.label("网易云音乐")
-        with ui.row():
-            ctcode = ui.input("国家代码(默认86)", value="86")
-            cellphone = ui.input("手机号")
-        captcha = ui.input("验证码")
-        with ui.row():
-            ui.button("发送验证码", on_click=lambda: ncm_api.send_captcha(cellphone.value, ctcode.value)).on_click(lambda: captcha.set_value("")).on_click(lambda: login_button.enable())
-            login_button = ui.button("登录", on_click=lambda: check_cellphone(cellphone.value, captcha.value, ctcode.value))
-            login_button.disable()
-            ui.button("使用cookie登录", on_click=lambda: notify())
 
     with ui.dialog() as base_config_dialog, ui.card(align_items="center"):
         with ui.row():
@@ -703,32 +437,13 @@ def _():
             ui.button("刷新", on_click=lambda: gift_select.set_options(get_gift()))
 
         with ui.row():
-            manual_keyword = ui.input("歌曲id").style("width: 150px;")
-            manual_keyword.tooltip("输入歌曲id或网易云链接")
-            ui.button("搜索", on_click=lambda: get_song_info(match.group() if (match := re.search(r"(?<=id=)\d+", manual_keyword.value)) else manual_keyword.value, add=True)).on_click(lambda: manual_keyword.set_value(""))
-        with ui.row():
-            list_num = ui.select(options=get_list_num(), label="歌单序号").style("width: 150px;")
-            ui.button("删除", on_click=lambda: del_list(list_num.value))
-        with ui.row():
-            ui.button("播放", on_click=lambda: send('play()'))
-            ui.button("暂停", on_click=lambda: send('pause()'))
             ui.button("切歌", on_click=lambda: change_list())
             ui.button("清空", on_click=lambda: clear_list())
-        with ui.row(align_items="center"):
-            ui.button("上一首", on_click=lambda: send('skipBack()'))
-            ui.button("下一首", on_click=lambda: send('skipForward()'))
-
-        ui.label() # 占位符
-        ui.slider(min=0, max=100, step=1, value=20, on_change=lambda e: send(f'volume({e.value / 100}, true)')).bind_value(app.storage.general, "volume").props('label-always')
 
         with ui.row():
             ui.button("点歌设置", on_click=lambda: base_config_dialog.open())
-            ui.button("账号登录", on_click=lambda: auth_dialog.open())
-            ui.button("检查更新", on_click=lambda: check_update())
+
         with ui.link(f"http://127.0.0.1:{port}/player", f"http://127.0.0.1:{port}/player", new_tab=True):
             ui.tooltip("OBS浏览器源URL")
 
-    check_update(True)
-    ui.timer(300, lambda: check_auth())
-
-ui.run(port=port, title=f"bili_ncm | v{version}", native=True, reload=False, window_size=[660, 760])
+ui.run(port=port, title=f"bili_canción | v{version}", native=True, reload=False, window_size=[660, 760])

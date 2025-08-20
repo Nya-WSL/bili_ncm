@@ -168,3 +168,4 @@ aplayer.json
 danmaku.json
 *.env
 env.py
+song.json
