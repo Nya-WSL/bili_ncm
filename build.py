@@ -84,7 +84,6 @@ def get_key():
     subprocess.call(command)
     shutil.copytree("static", os.path.join("dist", args.name, "static"))
     shutil.copy("config.example.json", os.path.join("dist", args.name))
-    os.remove("env.py")
 
 if __name__ == '__main__':
     main()

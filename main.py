@@ -15,7 +15,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.3.1-alpha"
+version = "1.3.2-alpha"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.add_static_files('/static', 'static')
 
@@ -387,24 +387,30 @@ def save_config():
         json.dump(config, f, ensure_ascii=False, indent=4)
 
 async def change_list(on = False):
+    for client in app.clients("/player"):
+        with client:
+            index = await ui.run_javascript("ap.list.index", timeout=3)
+
+    if on:
+        index = index - 1 # index为下一首歌，需-1
+
     with open("aplayer.json", "r", encoding="utf-8") as f:
         audio = json.load(f)
     with open("playlist.json", "r", encoding="utf-8") as f:
         playlist = json.load(f)
     if len(audio) > 0:
-        audio.pop(0)
+        audio.pop(index)
         with open("aplayer.json", "w", encoding="utf-8") as f:
             json.dump(audio, f, ensure_ascii=False, indent=4)
     if len(playlist) > 0:
-        playlist.pop(0)
+        playlist.pop(index)
         with open("playlist.json", "w", encoding="utf-8") as f:
             json.dump(playlist, f, ensure_ascii=False, indent=4)
 
-    if not on:
-        send('list.remove(0)')
-        send('list.hide()')
-        await asyncio.sleep(0.5)
-        send('list.show()')
+    send(f'list.remove({index})')
+    send('list.hide()')
+    await asyncio.sleep(0.5)
+    send('list.show()')
 
     try:
         list_num.set_options(get_list_num()) # 更新列表序号
@@ -614,11 +620,7 @@ def _():
             }});
             ap.volume({volume}, true); // 设置音量
             ap.on('ended', function () {{
-                ap.list.remove(ap.list.index - 1); // index为下一首歌，需-1
-                ap.list.hide() // aplayer在移除时不会自动更新列表，需手动刷新一次
-                ap.list.show()
                 emitEvent('ap_ended'); // 创建自定义监听：播放结束
-                ap.play();
             }});
         </script>
     ''')
