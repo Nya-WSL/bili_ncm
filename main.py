@@ -15,8 +15,9 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.3.2-alpha"
+version = "1.3.3-alpha"
 b_connect_status = False # 初始化弹幕服务器连接状态
+app.storage.general.indent = True
 app.add_static_files('/static', 'static')
 
 example_config = {
@@ -177,6 +178,8 @@ class BiliHandler(blivedm.BaseHandler):
                             danmaku_data[user].pop('danmaku')
                         except Exception as e:
                             logger.warning(f"礼物记录出现错误: {e}")
+                        finally:
+                            return
                     else:
                         result = f"[弹幕在送礼前后{delay_gift_time.value / 60}分钟内] 用户: {user}, 时间差: {time_diff}秒"
                         logger.info(result)
@@ -200,6 +203,7 @@ class BiliHandler(blivedm.BaseHandler):
                     if guard_level == 0 and not is_admin and not status:
                         with notify_card:
                             ui.notify(f"{user} - 点歌冷却中！cd: {int(danmaku_time.value + danmaku_cd[user]["danmaku"] - current_time)}秒")
+                            return
 
             if fans_medal_checkbox.value and fans_medal_level >= fans_medal.value:
                 status = True
