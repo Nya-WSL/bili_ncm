@@ -15,7 +15,7 @@ from nicegui import ui, app
 
 from blivedm import blivedm
 
-version = "1.3.3-alpha"
+version = "1.3.4-alpha"
 b_connect_status = False # 初始化弹幕服务器连接状态
 app.storage.general.indent = True
 app.add_static_files('/static', 'static')
