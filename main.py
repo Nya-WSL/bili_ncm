@@ -737,4 +737,10 @@ def _():
     check_update(True)
     ui.timer(300, lambda: check_auth())
 
+# pywebview 默认 private_mode=True，会把 WebView2 用户数据目录指到随机 %TEMP%\tmpXXXXXXXX\EBWebView，
+# 该目录需现场创建，被杀毒软件/沙箱/残留进程干扰时就会报“无法创建数据目录”。此处固定为稳定目录。
+_webview_storage = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "bili_ncm", "webview")
+os.makedirs(_webview_storage, exist_ok=True)
+app.native.start_args["storage_path"] = _webview_storage
+
 ui.run(port=port, title=f"bili_ncm | v{version}", native=True, reload=False, window_size=[660, 760])
